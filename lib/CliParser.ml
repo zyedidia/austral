@@ -53,7 +53,9 @@ module Errors = struct
       Code "--no-entrypoint";
       Text " requires ";
       Code "--target-type=c";
-      Text ", because otherwise the compiler will try to build the generated C code, and will fail because there is no entrypoint function."
+      Text " or ";
+      Code "--target-type=lir";
+      Text ", because otherwise the compiler will try to build the generated code, and will fail because there is no entrypoint function."
     ]
 
   let unknown_target target =
@@ -87,6 +89,7 @@ type target =
   | TypeCheck
   | Executable of { bin_path: string; entrypoint: entrypoint; }
   | CStandalone of { output_path: string; entrypoint: entrypoint option; }
+  | LirStandalone of { output_path: string; entrypoint: entrypoint option; }
 [@@deriving eq]
 
 type error_reporting_mode =
@@ -168,6 +171,19 @@ let parse_c_target (arglist: arglist): (arglist * target) =
       | None ->
          Errors.missing_entrypoint ())
 
+let parse_lir_target (arglist: arglist): (arglist * target) =
+  match pop_value_flag arglist "entrypoint" with
+  | Some (arglist, entrypoint) ->
+     let (arglist, output_path) = get_output arglist in
+     (arglist, LirStandalone { output_path = output_path; entrypoint = Some (parse_entrypoint entrypoint) })
+  | None ->
+     (match pop_bool_flag arglist "no-entrypoint" with
+      | Some arglist ->
+         let (arglist, output_path) = get_output arglist in
+         (arglist, LirStandalone { output_path = output_path; entrypoint = None })
+      | None ->
+         Errors.missing_entrypoint ())
+
 let parse_target_type (arglist: arglist): (arglist * target) =
   match pop_value_flag arglist "target-type" with
   | Some (arglist, target_value) ->
@@ -177,8 +193,11 @@ let parse_target_type (arglist: arglist): (arglist * target) =
          (* Build an executable binary. *)
          parse_executable_target arglist
       | "c" ->
-         (* Build a standaloine C file. *)
+         (* Build a standalone C file. *)
          parse_c_target arglist
+      | "lir" ->
+         (* Build a standalone LinIR file. *)
+         parse_lir_target arglist
       | "tc" ->
          (* Typecheck. *)
          (arglist, TypeCheck)

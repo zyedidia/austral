@@ -10,3 +10,6 @@ open Identifier
 
 (** Given the env, and the name of the entrypoint function, generate the entrypoint code. *)
 val entrypoint_code : env -> qident -> string
+
+(** Given the env and the name of the entrypoint function, generate LinIR entrypoint code. *)
+val lir_entrypoint_code : env -> qident -> string

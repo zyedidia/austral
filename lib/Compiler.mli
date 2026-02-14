@@ -31,3 +31,11 @@ val compile_multiple : compiler -> module_source list -> compiler
 val compile_entrypoint : compiler -> module_name -> identifier -> compiler
 
 val post_compile : compiler -> compiler
+
+val empty_lir_compiler : compiler
+
+val compile_multiple_lir : compiler -> module_source list -> compiler
+
+val compile_lir_entrypoint : compiler -> module_name -> identifier -> compiler
+
+val post_compile_lir : compiler -> compiler

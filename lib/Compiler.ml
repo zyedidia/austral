@@ -31,6 +31,7 @@ open Reporter
 open Entrypoint
 open ExportInstantiation
 open HtmlError
+open LinIRGen
 
 let append_import_to_interface (ci: concrete_module_interface) (import: concrete_import_list): concrete_module_interface =
   let (ConcreteModuleInterface (mn, docstring, imports, decls)) = ci in
@@ -166,3 +167,64 @@ let empty_compiler: compiler =
           dump_and_die ()
       in
       c)
+
+(* --- LinIR compilation path --- *)
+
+let rec compile_mod_lir (c: compiler) (source: module_source): compiler =
+  with_frame "Compile module (LIR)"
+    (fun _ ->
+      let env: env = cenv c in
+      let (env, name, combined, int_file_id, body_file_id) = parse_and_combine env source in
+      adorn_error_with_module_name name
+        (fun _ ->
+          let _ = check_ends_in_return combined in
+          let combined: SmallCombined.combined_module = DesugaringPass.desugar combined in
+          let (env, linked): (env * linked_module) = extract env combined int_file_id body_file_id in
+          let typed: typed_module = augment_module env linked in
+          let _ = check_module_linearity typed in
+          let env: env = extract_bodies env typed in
+          let (env, mono): (env * mono_module) = monomorphize env typed in
+          let lir_code: string = gen_lir_module env mono in
+          let code: string = (compiler_code c) ^ "\n" ^ lir_code in
+          Compiler (env, code)))
+
+let rec compile_multiple_lir c modules =
+  match modules with
+  | m::rest -> compile_multiple_lir (compile_mod_lir c m) rest
+  | [] -> c
+
+let empty_lir_compiler: compiler =
+  with_frame "Compile built-in modules (LIR)"
+    (fun _ ->
+      let env: env = empty_env in
+      let c = Compiler (env, "") in
+      let c =
+        try
+          compile_mod_lir c (fake_mod_source pervasive_interface_source pervasive_body_source)
+        with Austral_error error ->
+          Printf.eprintf "%s" (render_error_to_plain error);
+          html_error_dump error;
+          dump_and_die ()
+      in
+      let c =
+        try
+          compile_mod_lir c (fake_mod_source memory_interface_source memory_body_source)
+        with Austral_error error ->
+          Printf.eprintf "%s" (render_error_to_plain error);
+          html_error_dump error;
+          dump_and_die ()
+      in
+      c)
+
+let post_compile_lir (compiler: compiler): compiler =
+  let env: env = cenv compiler in
+  let (env, decls): env * mdecl list = monomorphize_wrappers env in
+  let lir_code: string = gen_lir_module env (MonoModule (make_mod_name "Austral.Wrappers", decls)) in
+  let code: string = (compiler_code compiler) ^ "\n" ^ lir_code in
+  Compiler (env, code)
+
+let compile_lir_entrypoint c mn i =
+  let qi = make_qident (mn, i, i) in
+  let (Compiler (m, code)) = c in
+  let entry_code: string = lir_entrypoint_code m qi in
+  Compiler (m, code ^ "\n" ^ entry_code)

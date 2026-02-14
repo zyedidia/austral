@@ -190,3 +190,46 @@ let entrypoint_code (env: env) (name: qident): string =
      empty_entrypoint_code entrypoint_id (get_exit_code_monomorph env)
   | RootCapEntrypoint ->
      entrypoint_code (get_root_capability_monomorph env) (get_exit_code_monomorph env) entrypoint_id
+
+let lir_entrypoint_code (env: env) (name: qident): string =
+  let (entrypoint_id, kind): decl_id * entrypoint_kind = check_entrypoint_validity env name in
+  let exit_code_mono = get_exit_code_monomorph env in
+  let exit_code_name = gen_mono_id exit_code_mono in
+  let entry_func = gen_decl_id entrypoint_id in
+  match kind with
+  | RootCapEntrypoint ->
+     let root_cap_mono = get_root_capability_monomorph env in
+     let root_cap_name = gen_mono_id root_cap_mono in
+     "export func @main() -> i32 {\n"
+     ^ "  entry():\n"
+     ^ "    %0 = uconst\n"
+     ^ "    %1 = record_new @" ^ root_cap_name ^ ", %0\n"
+     ^ "    %2 = call @" ^ entry_func ^ ", %1\n"
+     ^ "    br_case %2, [ExitSuccess: @bb1(%2), ExitFailure: @bb2(%2)]\n"
+     ^ "\n"
+     ^ "  bb1(%3: ptr<" ^ exit_code_name ^ "#ExitSuccess>):\n"
+     ^ "    free %3\n"
+     ^ "    %4 = iconst i32 0\n"
+     ^ "    ret %4\n"
+     ^ "\n"
+     ^ "  bb2(%5: ptr<" ^ exit_code_name ^ "#ExitFailure>):\n"
+     ^ "    free %5\n"
+     ^ "    %6 = iconst i32 1\n"
+     ^ "    ret %6\n"
+     ^ "}\n"
+  | EmptyEntrypoint ->
+     "export func @main() -> i32 {\n"
+     ^ "  entry():\n"
+     ^ "    %0 = call @" ^ entry_func ^ "\n"
+     ^ "    br_case %0, [ExitSuccess: @bb1(%0), ExitFailure: @bb2(%0)]\n"
+     ^ "\n"
+     ^ "  bb1(%1: ptr<" ^ exit_code_name ^ "#ExitSuccess>):\n"
+     ^ "    free %1\n"
+     ^ "    %2 = iconst i32 0\n"
+     ^ "    ret %2\n"
+     ^ "\n"
+     ^ "  bb2(%3: ptr<" ^ exit_code_name ^ "#ExitFailure>):\n"
+     ^ "    free %3\n"
+     ^ "    %4 = iconst i32 1\n"
+     ^ "    ret %4\n"
+     ^ "}\n"

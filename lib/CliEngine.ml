@@ -104,7 +104,7 @@ and print_compile_usage _: unit =
   print_endline "";
   print_endline "Options:";
   print_endline "    --help          Print this text.";
-  print_endline "    --target-type   One of `bin`, `tc`, `c`. Default is `bin`.";
+  print_endline "    --target-type   One of `bin`, `tc`, `c`, `lir`. Default is `bin`.";
   print_endline "    --output        Path to the output file.";
   print_endline "    --entrypoint    The name of the entrypoint function, in the";
   print_endline "                    format `<module name>:<function name>`.";
@@ -171,6 +171,8 @@ and exec_target (mods: module_source list) (target: target): unit =
      exec_compile_to_bin mods bin_path entrypoint
   | CStandalone { output_path; entrypoint; } ->
      exec_compile_to_c mods output_path entrypoint
+  | LirStandalone { output_path; entrypoint; } ->
+     exec_compile_to_lir mods output_path entrypoint
 
 and exec_compile_to_bin (mods: module_source list) (bin_path: string) (entrypoint: entrypoint): unit =
   (* Compile everything to a C file. *)
@@ -188,6 +190,18 @@ and exec_compile_to_bin (mods: module_source list) (bin_path: string) (entrypoin
   (* Invoke `cc`. *)
   let _ = compile_c_code cfile bin_path in
   ()
+
+and exec_compile_to_lir (mods: module_source list) (output_path: string) (entrypoint: entrypoint option): unit =
+  let compiler = compile_multiple_lir empty_lir_compiler mods in
+  let compiler = post_compile_lir compiler in
+  let compiler =
+    match entrypoint with
+    | Some (Entrypoint (module_name, name)) ->
+       compile_lir_entrypoint compiler module_name name
+    | None ->
+       compiler
+  in
+  write_string_to_file output_path (compiler_code compiler)
 
 and exec_compile_to_c (mods: module_source list) (output_path: string) (entrypoint: entrypoint option): unit =
   (* Compile everything to a C file. *)
